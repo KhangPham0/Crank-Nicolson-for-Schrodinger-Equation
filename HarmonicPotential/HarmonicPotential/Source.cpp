@@ -21,10 +21,10 @@
 #include <math.h>
 
 #define PI M_PI
-#define scale 5./.1
+#define scale 1.0//5./.1
 #define m1 1.//9.10938E-31 
 #define m2 1.//9.10938E-31
-#define L 0.5
+#define L 10.//0.5
 #define T 25
 #define sig .05
 #define grid_point 100
@@ -306,7 +306,7 @@ int main() {
 		for (int j = 0; j < grid_point; j++)
 			file5 << v.real_space(i) << "\t" << v.real_space(j) << "\t" << v.potential(i, j) << std::endl;
 	int index = 0;
-	for (double k = v.dt; k <= 20000 * v.dt; k += v.dt) {
+	for (double k = v.dt; k <= 4000 * v.dt; k += v.dt) {
 		std::cout << index << std::endl;
 		/*file4.open("psi" + to_string_with_precision(k - v.dt, 6) + ".dat");
 		for (int z = 0; z < grid_point; z++) {
