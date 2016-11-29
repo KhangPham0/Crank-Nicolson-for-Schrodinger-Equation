@@ -25,7 +25,6 @@
 #define m1 .5//9.10938E-31 
 #define m2 5.//9.10938E-31
 #define L .5//1.5
-#define T 25
 #define sig .05
 #define grid_point 100
 #define pdx L/grid_point//.01401//.001 //created so that grid_point is easier to keep track of

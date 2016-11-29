@@ -1,34 +1,25 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
-#include <iomanip>
-#include <memory>
-#include <unordered_map>
-#include <utility>
 #include <vector>
 #include <string.h>
-#include <assert.h>
 #include <array>
 #include <iostream>
 #include <complex>
-#include <set>
-#include <algorithm>
-#include <future>
 #include <stdlib.h>
-#include <cstdlib>
 #include <fstream>
 #include <stdio.h>
 #include <string>
 #include <math.h>
+#include <iomanip> //this is for setprecision
 
 #define PI M_PI
-#define scale 1.0//5./.1
-#define m1 1.//9.10938E-31 
-#define m2 1.//9.10938E-31
-#define L 10.//0.5
-#define T 25
+#define h_bar 1.0
+#define M 1. 
+#define L .5
 #define sig .05
 #define grid_point 100
-#define pdx L/grid_point//.01401//.001 //created so that grid_point is easier to keep track of
+#define K 1.0E6
+#define omega std::sqrt(K/M)
 
 
 typedef std::complex<double> compx;
@@ -40,34 +31,20 @@ class wave_function {
 public:
 	wave_function();
 	wave_function(bool);
-	double h_bar = 1.0;//1.054572E-34;
-	double k1 = 110.;
-	double k2 = -110.;
-	double x_01 = .33*grid_point;
-	double x_02 = .667*grid_point;
 	double dt = 4.2E-06;
-	double dx = pdx;
-	double V_0 = -50000.;
-	double al = .062;
+	double dx = L/grid_point;
 	std::vector<std::vector<compx>> value;
-	std::vector<compx> density_x1;
-	std::vector<compx> density_x2;
 	void solve_triag();
 	double potential(int, int);
 	double real_space(int);
 	compx sec_space_deriv(char, int, int);
-	void rho();
 	void normalize();
 };
 
 wave_function::wave_function() {
 	value.resize(grid_point);
-	density_x1.resize(grid_point);
-	density_x2.resize(grid_point);
 	for (int l = 0; l < grid_point; l++) {
 		value[l].resize(grid_point);
-		density_x1[l] = 0;
-		density_x2[l] = 0;
 		for (int m = 0; m < grid_point; m++)
 			value[l][m] = compx(0., 0.);
 	}
@@ -77,18 +54,14 @@ wave_function::wave_function(bool init) {
 	if (init) {
 		compx psi00, psi10, psi12;
 		value.resize(grid_point);
-		density_x1.resize(grid_point);
-		density_x2.resize(grid_point);
 		for (int l = 0; l < grid_point; l++) {
 			value[l].resize(grid_point);
-			density_x1[l] = 0;
-			density_x2[l] = 0;
 			for (int m = 0; m < grid_point; m++) {
 				/*value[l][m] = exp(I*compx(k1, 0)*compx(real_space(l), 0))*exp(-pow(real_space(l) - real_space(x_01), 2.) / (4.*sig*sig))
 				*exp(I*compx(k2, 0)*compx(real_space(m), 0))*exp(-pow(real_space(m) - real_space(x_02), 2.) / (4.*sig*sig));*/
-				psi00 = pow(m1 / (PI*h_bar), .25)*exp(-m1*pow((real_space(l)), 2.) / (2.*h_bar))*pow(m1*3.0 / (PI*h_bar), .25)*exp(-m1*pow(real_space(m), 2.) / (2.*h_bar));
-				psi10 = pow(m1 / (PI*h_bar), .25)*pow(2., .5)*pow(m1 / (h_bar), .5)*(real_space(l))*exp(-m1*pow(real_space(l), 2.) / (2.*h_bar))*pow(m1 / (PI*h_bar), .25)*exp(-m1*pow(real_space(m), 2.) / (2.*h_bar));
-				value[l][m] = psi00 + psi10;
+				psi00 = pow(M*omega / (PI*h_bar), .25)*exp(-M*omega*pow((real_space(l)), 2.) / (2.*h_bar))*pow(M*omega / (PI*h_bar), .25)*exp(-M*omega*pow(real_space(m), 2.) / (2.*h_bar));
+				psi10 = pow(M*omega / (PI*h_bar), .25)*pow(2., .5)*pow(M*omega / (h_bar), .5)*real_space(l)*exp(-M*omega*pow(real_space(l), 2.) / (2.*h_bar))*pow(M*omega / (PI*h_bar), .25)*exp(-M*omega*pow(real_space(m), 2.) / (2.*h_bar));
+				value[l][m] = psi00+psi10;
 			}
 		}
 		normalize();
@@ -106,7 +79,7 @@ wave_function::wave_function(bool init) {
 //Use this when boudaries are periodic
 void wave_function::solve_triag() {
 
-	compx a = -h_bar / (two*m1), b = -h_bar / (two*m2);
+	compx a = -h_bar / (two*M), b = -h_bar / (two*M);
 	double r = dt / (dx*dx);
 	compx A = (I*r*a / two), B = (I*r*b / two), C = I*dt / two;
 	compx mid = one - two*A;
@@ -216,7 +189,7 @@ void wave_function::solve_triag() {
 
 double wave_function::potential(int x1, int x2) {
 
-	return .5*m1*(real_space(x1))*(real_space(x1)) + /*.5*m1*9.*pow(real_space(x2) - real_space(x1), 2.) +*/ .5*m2*(real_space(x2))*(real_space(x2));
+	return .5*M*omega*omega*(real_space(x1))*(real_space(x1)) + .5*M*omega*omega*(real_space(x2))*(real_space(x2));
 	//square well
 	/*if (al - abs(real_space(x1) - real_space(x2)) > 0.)
 	return V_0;
@@ -228,7 +201,7 @@ double wave_function::potential(int x1, int x2) {
 }
 
 double wave_function::real_space(int index) {
-	return scale*((-L / 2.0) + (index*dx));
+	return (-L / 2.0) + (index*dx);
 }
 
 
@@ -261,24 +234,10 @@ std::string to_string_with_precision(const NEW a_value, const int n = 6)
 	return out.str();
 }
 
-//rho(x,t),density of the first particle
-void wave_function::rho() {
-	for (int k = 0; k < grid_point; k++) {
-		density_x1[k] = 0.;
-		density_x2[k] = 0.;
-	}
-
-	for (int i = 0; i < grid_point; i++) {
-		for (int j = 0; j < grid_point; j++) {
-			density_x1[i] += pow(abs(value[i][j]), 2.)*dx;
-			density_x2[i] += pow(abs(value[j][i]), 2.)*dx;
-		}
-	}
-}
 
 //normalization for the function above rho
 void wave_function::normalize() {
-	compx sum = 0;
+/*	compx sum = 0;
 	for (int i1 = 0; i1 < grid_point; i1++) {
 		for (int i2 = 0; i2 < grid_point; i2++) {
 			sum += pow(abs(value[i1][i2]), 2.0);
@@ -290,38 +249,25 @@ void wave_function::normalize() {
 		for (int i2 = 0; i2 < grid_point; i2++) {
 			value[i1][i2] *= amplitude;
 		}
-	}
+	}*/
 }
 
 int main() {
 	double check = 0.0;
 	wave_function v(true);
 	std::ofstream file1; //density of both particles
-	std::ofstream file2; //density individually
-						 //std::ofstream file3; //density individually
 	std::ofstream file5; //potential
-						 //std::ofstream file4; //testing psi1 and psi2 normalization
 	file5.open("potential.dat");
 	for (int i = 0; i < grid_point; i++)
 		for (int j = 0; j < grid_point; j++)
 			file5 << v.real_space(i) << "\t" << v.real_space(j) << "\t" << v.potential(i, j) << std::endl;
 	int index = 0;
-	for (double k = v.dt; k <= 4000 * v.dt; k += v.dt) {
+	for (double k = v.dt; k <= 10000 * v.dt; k += v.dt) {
 		std::cout << index << std::endl;
-		/*file4.open("psi" + to_string_with_precision(k - v.dt, 6) + ".dat");
-		for (int z = 0; z < grid_point; z++) {
-		file4 << abs(v.psi1[z]) << "\t" << abs(v.psi2[z]) << std::endl;
-		}
-		file4.close();*/
-		v.rho();
-		if (index % 100 == 0) {
-			file1.open("data_" + to_string_with_precision(index, 0) + ".dat");
+		if (index % 10 == 0) {
+			file1.open("data_" + to_string_with_precision(index, 0) +".dat");
 			file1 << "Time   " << k - v.dt << std::endl
 				<< "x" << "\t" << "y" << "\t" << "imag" << "\t" << "real" << "\t" << "abs" << std::endl;
-			file2.open("x_" + to_string_with_precision(index, 0) + ".dat");
-			file2 << "Time   " << k - v.dt << std::endl
-				<< "Coordinate" << "\t" << "x1" << "\t" << "x2" << std::endl;
-			//file3.open("x2_" + to_string_with_precision(k - v.dt, 6) + ".dat");
 			for (int i = 0; i < grid_point; i++) {
 				for (int j = 0; j < grid_point; j++) {
 					file1 << v.real_space(i) << "\t"
@@ -331,13 +277,7 @@ int main() {
 						<< abs(v.value[i][j]) << std::endl;
 				}
 			}
-			for (int k = 0; k < grid_point; k++) {
-				file2 << v.real_space(k) << "\t"
-					<< abs(v.density_x1[k]) << "\t"
-					<< abs(v.density_x2[k]) << std::endl;
-			}
 			file1.close();
-			file2.close();
 
 		}
 		v.solve_triag();
