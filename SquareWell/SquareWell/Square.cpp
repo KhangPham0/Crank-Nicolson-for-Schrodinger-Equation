@@ -1,18 +1,11 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <iomanip>
-#include <memory>
-#include <unordered_map>
-#include <utility>
 #include <vector>
 #include <string.h>
-#include <assert.h>
 #include <array>
 #include <iostream>
 #include <complex>
-#include <set>
-#include <algorithm>
-#include <future>
 #include <stdlib.h>
 #include <cstdlib>
 #include <fstream>
@@ -22,13 +15,12 @@
 
 #define PI M_PI
 #define scale 1.5/.5
-#define m1 .5//9.10938E-31 
-#define m2 5.//9.10938E-31
+#define m1 .5
+#define m2 5.
 #define L .5//1.5
 #define sig .05
 #define grid_point 100
-#define pdx L/grid_point//.01401//.001 //created so that grid_point is easier to keep track of
-
+#define boundary "non_periodic" //"periodic"
 
 typedef std::complex<double> compx;
 #define I compx(0.,1.)
@@ -39,19 +31,20 @@ class wave_function {
 public:
 	wave_function();
 	wave_function(bool);
-	double h_bar = 1.0;//1.054572E-34;
 	double k1 = 110.;
 	double k2 = -110.;
 	double x_01 = .25*grid_point;
 	double x_02 = .6*grid_point;
 	double dt = 4.2E-6;
-	double dx = pdx;
+	double dx = L/grid_point;
 	double V_0 = 80000.;
 	double al = .062;
+	double totSteps = 1000 * dt;
 	std::vector<std::vector<compx>> value;
 	std::vector<compx> density_x1;
 	std::vector<compx> density_x2;
 	void solve_triag();
+	void non_periodic_solve_triag();
 	double potential(int, int);
 	double real_space(int);
 	compx sec_space_deriv(char, int, int);
@@ -74,18 +67,32 @@ wave_function::wave_function() {
 
 wave_function::wave_function(bool init) {
 	if (init) {
-		compx psi00, psi10, psi12;
 		value.resize(grid_point);
 		density_x1.resize(grid_point);
 		density_x2.resize(grid_point);
 		for (int l = 0; l < grid_point; l++) {
 			value[l].resize(grid_point);
-			density_x1[l] = 0;
-			density_x2[l] = 0;
+			density_x1[l] = 0.;
+			density_x2[l] = 0.;
 			for (int m = 0; m < grid_point; m++) {
-				value[l][m] = exp(I*compx(k1, 0)*compx(real_space(l), 0))*exp(-pow(real_space(l) - real_space(x_01), 2.) / (4.*sig*sig))
-					*exp(I*compx(k2, 0)*compx(real_space(m), 0))*exp(-pow(real_space(m) - real_space(x_02), 2.) / (4.*sig*sig));
-
+				value[l][m] = 0.0; /*exp(I*compx(k1, 0)*compx(real_space(l), 0))*exp(-pow(real_space(l) - real_space(x_01), 2.) / (4.*sig*sig))
+					*exp(I*compx(k2, 0)*compx(real_space(m), 0))*exp(-pow(real_space(m) - real_space(x_02), 2.) / (4.*sig*sig));*/
+			}
+		}
+		if (boundary == "non_periodic") {
+			for (int l = 1; l < grid_point - 1; l++) {
+				for (int m = 1; m < grid_point - 1; m++) {
+					value[l][m] = exp(I*compx(k1, 0)*compx(real_space(l), 0))*exp(-pow(real_space(l) - real_space(x_01), 2.) / (4.*sig*sig))
+						*exp(I*compx(k2, 0)*compx(real_space(m), 0))*exp(-pow(real_space(m) - real_space(x_02), 2.) / (4.*sig*sig));
+				}
+			}
+		}
+		else {
+			for (int l = 0; l < grid_point; l++) {
+				for (int m = 0; m < grid_point; m++) {
+					value[l][m] = exp(I*compx(k1, 0)*compx(real_space(l), 0))*exp(-pow(real_space(l) - real_space(x_01), 2.) / (4.*sig*sig))
+						*exp(I*compx(k2, 0)*compx(real_space(m), 0))*exp(-pow(real_space(m) - real_space(x_02), 2.) / (4.*sig*sig));
+				}
 			}
 		}
 		normalize();
@@ -100,10 +107,84 @@ wave_function::wave_function(bool init) {
 	}
 }
 
+
+//Use this when boudaries are being forced to equal to 0
+void wave_function::non_periodic_solve_triag() {
+
+	compx a = -one / (two*m1), b = -one / (two*m2);
+	double r = dt / (dx*dx);
+	compx A = I*r*a / two, B = I*r*b / two, C = I*dt / two, mid = one - two*A;
+	std::vector<compx> alpha(grid_point - 1);
+	std::vector<compx> beta(grid_point);
+	wave_function tmp; //hold the n* values
+
+	for (int a = 0; a < grid_point; a++)
+		for (int b = 0; b < grid_point; b++)
+			tmp.value[a][b] = value[a][b];
+
+	//std::cout << "copied" << std::endl;
+	//Solving for the x1 direction first
+	for (int x2 = 0; x2 < grid_point; x2++) {
+
+		alpha[0] = A / mid;
+
+		beta[0] = ((one - C*potential(0, x2))*value[0][x2] - B*sec_space_deriv('y', 0, x2)) / mid;//((one - D)*value[0][0] - E) / F;
+
+  //std::cout << "beginning" << std::endl;
+  //Forward run
+		for (int l = 1; l < grid_point; l++) {
+			if (l < grid_point - 1) //alpha array has 1 less element than beta because there are no last element, so minus 2 because vector starts out at 0 and counts up to 98 (which is grid_point-2)
+				alpha[l] = A / (mid - A*alpha[l - 1]);
+			//else
+			//	alpha[i] = compx(0., 0.); //alpha does not have a value after gird_point - 2 so i'll just let it be 0 since i don't use it anyway
+			beta[l] = ((one - C*potential(l, x2)) * value[l][x2] - B*sec_space_deriv('y', l, x2)
+				- A*beta[l - 1]) / (mid - A*alpha[l - 1]);
+			//std::cout << i << std::endl;
+		}
+		//std::cout << "first loop" << std::endl;
+
+		//Backward run
+		tmp.value[grid_point - 1][x2] = beta[grid_point - 1];
+		for (int l = grid_point - 2; l >= 0; l--) { //-2 because -1 is calculated 1 line above
+			tmp.value[l][x2] = beta[l] - alpha[l] * tmp.value[l + 1][x2];
+		}
+		//std::cout << y << "   The end" << std::endl;
+	}
+	tmp.normalize();
+	//std::cout << "x direction done" << std::endl;
+	//Solving for the x2 direction
+	for (int x1 = 0; x1 < grid_point; x1++) {
+
+		alpha[0] = B / (one - two*B + C*potential(0, 0));
+
+		beta[0] = (tmp.value[x1][0] - A*tmp.sec_space_deriv('x', x1, 0)) / (one - two*B + C*potential(x1, 0));
+		//std::cout << x << "   beginning2" << std::endl;
+		//Forward run
+		for (int m = 1; m < grid_point; m++) {
+			if (m < grid_point - 1)  //alpha array has 1 less element than beta because there are no last element, so minus 2 because vector starts out at 0 and counts up to 98 (which is grid_point-2)
+				alpha[m] = B / (one - two * B + C*potential(x1, m) - B*alpha[m - 1]);
+			//else
+			//	alpha[j] = compx(0., 0.);
+			beta[m] = (tmp.value[x1][m] - B*tmp.sec_space_deriv('x', x1, m) - B*beta[m - 1]) / (one - two*B + C*potential(x1, m) - B*alpha[m - 1]);
+			//std::cout << j << std::endl;
+		}
+		//std::cout << "first loop2" << std::endl;
+
+		//Backward run
+		value[x1][grid_point - 1] = beta[grid_point - 1];
+		for (double m = grid_point - 2; m >= 0; m--) { //-2 because of the same reason above
+			value[x1][m] = beta[m] - alpha[m] * value[x1][m + 1];
+		}
+		//std::cout << x << "   The end2" << std::endl;
+	}
+	normalize();
+}
+
+
 //Use this when boudaries are periodic
 void wave_function::solve_triag() {
 
-	compx a = -h_bar / (two*m1), b = -h_bar / (two*m2);
+	compx a = -one / (two*m1), b = -one / (two*m2);
 	double r = dt / (dx*dx);
 	compx A = (I*r*a / two), B = (I*r*b / two), C = I*dt / two;
 	compx mid = one - two*A;
@@ -114,15 +195,12 @@ void wave_function::solve_triag() {
 	wave_function tmp; //hold the n* values
 	wave_function x_1, x_2; //hold the solutions of the tridiagonal "condensed" system with grid_point - 1 unknown
 
-							//Solving for the x1 direction first
+	//Solving for the x1 direction first
 	for (int x2 = 0; x2 < grid_point; x2++) {
 		//std::cout << " x2  " << x2 << std::endl;
 		alpha[0] = A / mid;
 
-		compx cur_pot = potential(0, x2);
-		compx der2 = sec_space_deriv('y', 0, x2);
-
-		beta1[0] = ((one - C*cur_pot)*value[0][x2] - B*der2) / mid;
+		beta1[0] = ((one - C*potential(0, x2))*value[0][x2] - B*sec_space_deriv('y', 0, x2)) / mid;
 		beta2[0] = -A / mid;
 
 		//std::cout << "beginning" << std::endl;
@@ -213,7 +291,7 @@ void wave_function::solve_triag() {
 
 double wave_function::potential(int x1, int x2) {
 
-	//return .5*m1*real_space(x1)*real_space(x1) + /*.5*m1*9.*pow(real_space(x2) - real_space(x1), 2.) +*/ .5*m2*real_space(x2)*real_space(x2);
+	//return .5*m1*real_space(x1)*real_space(x1) + .5*m1*9.*pow(real_space(x2) - real_space(x1), 2.) + .5*m2*real_space(x2)*real_space(x2);
 	//square well
 	if (al - abs(real_space(x1) - real_space(x2)) > 0.)
 		return V_0;
@@ -231,21 +309,26 @@ double wave_function::real_space(int index) {
 
 //x stands for x1 or particle 1 and y stands for x2 or particle 2
 compx wave_function::sec_space_deriv(char x1_or_x2, int l, int m) {
-	if (x1_or_x2 == 'x') {
-		if (l == 0)
-			return value[l + 1][m] - two * value[l][m] + value[grid_point - 1][m];
-		else if (l == grid_point - 1)
-			return value[0][m] - two * value[l][m] + value[l - 1][m];
-		else
-			return value[l + 1][m] - two * value[l][m] + value[l - 1][m];
+	if (boundary == "non_periodic") {
+
 	}
-	else if (x1_or_x2 == 'y') {
-		if (m == 0)
-			return value[l][m + 1] - two * value[l][m] + value[l][grid_point - 1];
-		else if (m == grid_point - 1)
-			return value[l][0] - two * value[l][m] + value[l][m - 1];
-		else
-			return value[l][m + 1] - two * value[l][m] + value[l][m - 1];
+	else {
+		if (x1_or_x2 == 'x') {
+			if (l == 0)
+				return value[l + 1][m] - two * value[l][m] + value[grid_point - 1][m];
+			else if (l == grid_point - 1)
+				return value[0][m] - two * value[l][m] + value[l - 1][m];
+			else
+				return value[l + 1][m] - two * value[l][m] + value[l - 1][m];
+		}
+		else if (x1_or_x2 == 'y') {
+			if (m == 0)
+				return value[l][m + 1] - two * value[l][m] + value[l][grid_point - 1];
+			else if (m == grid_point - 1)
+				return value[l][0] - two * value[l][m] + value[l][m - 1];
+			else
+				return value[l][m + 1] - two * value[l][m] + value[l][m - 1];
+		}
 	}
 }
 
@@ -295,21 +378,14 @@ int main() {
 	wave_function v(true);
 	std::ofstream file1; //density of both particles
 	std::ofstream file2; //density individually
-						 //std::ofstream file3; //density individually
 	std::ofstream file5; //potential
-						 //std::ofstream file4; //testing psi1 and psi2 normalization
 	file5.open("potential.dat");
 	for (int i = 0; i < grid_point; i++)
 		for (int j = 0; j < grid_point; j++)
 			file5 << v.real_space(i) << "\t" << v.real_space(j) << "\t" << v.potential(i, j) << std::endl;
 	int index = 0;
-	for (double k = v.dt; k <= T; k += v.dt) {
+	for (double k = v.dt; k <= v.totSteps; k += v.dt) {
 		std::cout << index << std::endl;
-		/*file4.open("psi" + to_string_with_precision(k - v.dt, 6) + ".dat");
-		for (int z = 0; z < grid_point; z++) {
-		file4 << abs(v.psi1[z]) << "\t" << abs(v.psi2[z]) << std::endl;
-		}
-		file4.close();*/
 		v.rho();
 		if (index % 10 == 0) {
 			file1.open("data_" + to_string_with_precision(index, 0) + ".dat");
@@ -337,7 +413,8 @@ int main() {
 			file2.close();
 
 		}
-		v.solve_triag();
+		//v.solve_triag();
+		v.non_periodic_solve_triag();
 		index++;
 	}
 	getchar();
