@@ -20,7 +20,7 @@
 #define m2 5.
 #define L .5//1.5
 #define sig .05
-#define grid_point 100
+#define grid_point 101
 
 typedef std::complex<double> compx;
 #define I compx(0.,1.)
@@ -40,6 +40,7 @@ public:
 	double V_0 = 80000.;
 	double al = .062;
 	double totSteps = 1000 * dt;
+	double w[3]; /////////simpson's weight
 	std::vector<std::vector<compx>> value;
 	std::vector<compx> density_x1;
 	std::vector<compx> density_x2;
@@ -66,6 +67,9 @@ wave_function::wave_function() {
 
 wave_function::wave_function(bool init) {
 	if (init) {
+		w[0] = dx / 3.;
+		w[1] = 4.*dx / 3.;
+		w[2] = 2.*dx / 3.;
 		value.resize(grid_point);
 		density_x1.resize(grid_point);
 		density_x2.resize(grid_point);
@@ -207,10 +211,13 @@ void wave_function::rho() {
 		density_x2[k] = 0.;
 	}
 
+	int k;
 	for (int i = 0; i < grid_point; i++) {
+		k = 1;
 		for (int j = 0; j < grid_point; j++) {
-			density_x1[i] += pow(abs(value[i][j]), 2.)*dx;
-			density_x2[i] += pow(abs(value[j][i]), 2.)*dx;
+			if (k == 3) k = 1;
+			density_x1[i] += w[k]*pow(abs(value[i][j]), 2.);
+			density_x2[i] += w[k]*pow(abs(value[j][i]), 2.);
 		}
 	}
 }
