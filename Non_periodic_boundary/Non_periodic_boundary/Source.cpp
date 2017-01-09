@@ -218,6 +218,7 @@ void wave_function::rho() {
 			if (k == 3) k = 1;
 			density_x1[i] += w[k]*pow(abs(value[i][j]), 2.);
 			density_x2[i] += w[k]*pow(abs(value[j][i]), 2.);
+			k += 1;
 		}
 	}
 }
